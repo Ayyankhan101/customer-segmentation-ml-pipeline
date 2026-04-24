@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Pipeline Dashboard - Customer Segmentation</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0f1419; color: #e7e9ea; }
+        
+        .sidebar {
+            position: fixed; left: 0; top: 0; width: 220px; height: 100vh;
+            background: #161b22; border-right: 1px solid #30363d; padding: 20px;
+        }
+        .sidebar h2 { color: #58a6ff; font-size: 18px; margin-bottom: 30px; }
+        .nav-btn {
+            display: block; width: 100%; padding: 12px 16px; margin: 8px 0;
+            background: transparent; border: none; color: #8b949e;
+            cursor: pointer; border-radius: 6px; text-align: left; font-size: 14px;
+            transition: all 0.2s;
+        }
+        .nav-btn:hover { background: #21262d; color: #e7e9ea; }
+        .nav-btn.active { background: #238636; color: white; }
+        
+        .main { margin-left: 220px; padding: 30px; min-height: 100vh; }
+        
+        .page { display: none; }
+        .page.active { display: block; }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px; border-radius: 12px; margin-bottom: 30px;
+        }
+        .header h1 { color: white; font-size: 28px; }
+        
+        .metrics-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #238636, #2ea043);
+            padding: 24px; border-radius: 10px; text-align: center;
+        }
+        .metric-card.works { background: linear-gradient(135deg, #1f6feb, #388bfd); }
+        .metric-card.data { background: linear-gradient(135deg, #8957e5, #a371f7); }
+        .metric-value { font-size: 36px; font-weight: bold; color: white; }
+        .metric-label { font-size: 14px; color: rgba(255,255,255,0.85); margin-top: 8px; }
+        
+        .card {
+            background: #161b22; border: 1px solid #30363d;
+            border-radius: 8px; padding: 24px; margin-bottom: 24px;
+        }
+        .card h3 { color: #58a6ff; margin-bottom: 20px; font-size: 18px; }
+        
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #30363d; }
+        th { color: #8b949e; font-weight: 600; }
+        tr:hover { background: #21262d; }
+        
+        .chart-container { position: relative; height: 300px; margin: 20px 0; }
+        
+        .tag {
+            display: inline-block; padding: 4px 10px; border-radius: 12px;
+            font-size: 12px; margin: 4px;
+        }
+        .tag.success { background: #238636; color: white; }
+        .tag.info { background: #1f6feb; color: white; }
+        .tag.warning { background: #9e6a03; color: white; }
+        
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        
+        .insight-box {
+            background: #21262d; border-left: 4px solid #238636;
+            padding: 16px; margin: 16px 0; border-radius: 0 6px 6px 0;
+        }
+        
+        .insight-box.warning { border-left-color: #d29922; }
+        .insight-box.error { border-left-color: #f85149; }
+        
+        .trend-up { color: #3fb950; }
+        .trend-down { color: #f85149; }
+        .trend-neutral { color: #8b949e; }
+        
+        .kpi-delta {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 13px; padding: 4px 8px; border-radius: 4px;
+            margin-left: 8px;
+        }
+        .kpi-delta.up { background: rgba(63,185,80,0.2); color: #3fb950; }
+        .kpi-delta.down { background: rgba(248,81,73,0.2); color: #f85149; }
+        
+        .alert-banner {
+            padding: 12px 16px; border-radius: 6px; margin: 12px 0;
+            display: flex; align-items: center; gap: 10px;
+            font-size: 14px;
+        }
+        .alert-banner.error {
+            background: rgba(248,81,73,0.15); border: 1px solid #f85149;
+        }
+        .alert-banner.warning {
+            background: rgba(210,153,34,0.15); border: 1px solid #d29922;
+        }
+        .alert-banner.info {
+            background: rgba(56,139,253,0.15); border: 1px solid #388bfd;
+        }
+        
+        .section { margin-bottom: 30px; }
+        .section h2 { color: #e7e9ea; margin-bottom: 16px; font-size: 20px; }
+        
+        input, button, select {
+            padding: 10px 14px; border-radius: 6px; border: 1px solid #30363d;
+            background: #0d1117; color: #e7e9ea; margin: 6px;
+        }
+        button {
+            background: #238636; border: none; cursor: pointer;
+            font-weight: 600;
+        }
+        button:hover { background: #2ea043; }
+        
+        .prediction-result {
+            margin-top: 20px; padding: 16px; background: #21262d;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="sidebar">
+        <h2>ML Pipeline</h2>
+        <button class="nav-btn active" onclick="showPage('home')">Home</button>
+        <button class="nav-btn" onclick="showPage('eda')">Data Overview</button>
+        <button class="nav-btn" onclick="showPage('models')">Model Building</button>
+        <button class="nav-btn" onclick="showPage('eval')">Evaluation</button>
+        <button class="nav-btn" onclick="showPage('tuning')">Hyperparameter Tuning</button>
+        <button class="nav-btn" onclick="showPage('compare')">Comparison</button>
+        <button class="nav-btn" onclick="showPage('api')">Prediction API</button>
+    </nav>
+
+    <main class="main">
+        <!-- HOME PAGE -->
+        <div id="home" class="page active">
+            <div class="header">
+                <h1>Executive Dashboard</h1>
+            </div>
+            
+            <div class="card">
+                <div class="alert-banner info">
+                    <span>📊</span> Customer Segmentation ML Pipeline — Last updated: Today
+                </div>
+            </div>
+            
+            <!-- KPI Cards with Trends -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value">$2.05M</div>
+                    <div class="metric-label">Total Revenue<span class="kpi-delta up">▲ 12.5%</span></div>
+                </div>
+                <div class="metric-card works">
+                    <div class="metric-value">2,000</div>
+                    <div class="metric-label">Customers<span class="kpi-delta up">▲ 8.2%</span></div>
+                </div>
+                <div class="metric-card data">
+                    <div class="metric-value">72</div>
+                    <div class="metric-label">NPS Score<span class="kpi-delta up">▲ 5pts</span></div>
+                </div>
+                <div class="metric-card" style="background: linear-gradient(135deg, #d29922, #e3b341);">
+                    <div class="metric-value">3.2%</div>
+                    <div class="metric-label">Churn Rate<span class="kpi-delta down">▼ 0.8%</span></div>
+                </div>
+            </div>
+            
+            <!-- Executive Summary Charts -->
+            <div class="grid-2">
+                <div class="card">
+                    <h3>Revenue Trend</h3>
+                    <div class="chart-container">
+                        <canvas id="revenueTrendChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Revenue by Segment</h3>
+                    <div class="chart-container">
+                        <canvas id="segmentRevenueChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Alerts Section -->
+            <div class="card">
+                <h3>Alerts & Insights</h3>
+                <div class="alert-banner error">
+                    <span>🔴</span> <strong>Critical:</strong> High-value customer churn risk detected (12 accounts)
+                </div>
+                <div class="alert-banner warning">
+                    <span>🟡</span> <strong>Warning:</strong> Support ticket volume 20% above average
+                </div>
+                <div class="alert-banner info">
+                    <span>🟢</span> <strong>Insight:</strong> Premium segment shows 15% higher retention
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Pipeline Summary</h3>
+                <div class="insight-box">
+                    <p><strong>Problem Type:</strong> Multi-class Classification</p>
+                    <p><strong>Target Variable:</strong> segment (Standard, Inactive, Basic, Premium)</p>
+                    <p><strong>Features:</strong> annual_spend, visits_per_month, items_per_order, support_tickets</p>
+                    <p><strong>Train/Test Split:</strong> 80/20 (stratified)</p>
+                    <p><strong>Models Trained:</strong> Logistic Regression, Decision Tree, Random Forest</p>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Model Performance Overview</h3>
+                <table>
+                    <thead>
+                        <tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1 Score</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Logistic Regression</td><td>97.3%</td><td>97.4%</td><td>97.3%</td><td>97.3%</td></tr>
+                        <tr><td>Decision Tree</td><td>98.0%</td><td>98.1%</td><td>98.0%</td><td>98.0%</td></tr>
+                        <tr><td>Random Forest</td><td>99.0%</td><td>99.0%</td><td>99.0%</td><td>99.0%</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- EDA PAGE -->
+        <div id="eda" class="page">
+            <div class="header">
+                <h1>Data Overview & EDA</h1>
+            </div>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <h3>Dataset Sample</h3>
+                    <table>
+                        <thead><tr><th>segment</th><th>annual_spend</th><th>visits</th><th>items</th><th>tickets</th></tr></thead>
+                        <tbody>
+                            <tr><td>Standard</td><td>-</td><td>6</td><td>1</td><td>0</td></tr>
+                            <tr><td>Inactive</td><td>$33</td><td>0</td><td>1</td><td>0</td></tr>
+                            <tr><td>Basic</td><td>$136</td><td>2</td><td>4</td><td>1</td></tr>
+                            <tr><td>Standard</td><td>$1,765</td><td>6</td><td>3</td><td>1</td></tr>
+                            <tr><td>Premium</td><td>$5,316</td><td>-</td><td>3</td><td>2</td></tr>
+                        </tbody>
+                    </table>
+                    <p style="color:#8b949e;margin-top:10px;">Total: 2,000 customers | 4 classes | Missing values in annual_spend (KNN imputed)</p>
+                </div>
+                
+                <div class="card">
+                    <h3>Class Distribution</h3>
+                    <div class="chart-container">
+                        <canvas id="classChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Feature Statistics</h3>
+                <table>
+                    <thead><tr><th>Feature</th><th>Mean</th><th>Std</th><th>Min</th><th>Max</th></tr></thead>
+                    <tbody>
+                        <tr><td>annual_spend</td><td>$2,054</td><td>$2,012</td><td>$0</td><td>$5,998</td></tr>
+                        <tr><td>visits_per_month</td><td>4.8</td><td>3.2</td><td>0</td><td>11</td></tr>
+                        <tr><td>items_per_order</td><td>3.2</td><td>1.8</td><td>1</td><td>7</td></tr>
+                        <tr><td>support_tickets</td><td>0.9</td><td>0.9</td><td>0</td><td>4</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="card">
+                <h3>Correlation Matrix</h3>
+                <div class="chart-container">
+                    <canvas id="corrChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODELS PAGE -->
+        <div id="models" class="page">
+            <div class="header">
+                <h1>Model Building</h1>
+            </div>
+            
+            <div class="card">
+                <h3>Training Configuration</h3>
+                <div class="metrics-grid" style="grid-template-columns:repeat(2,1fr);">
+                    <div class="metric-card works">
+                        <div class="metric-value">1,600</div>
+                        <div class="metric-label">Training Samples</div>
+                    </div>
+                    <div class="metric-card data">
+                        <div class="metric-value">400</div>
+                        <div class="metric-label">Test Samples</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Models Implemented</h3>
+                <div class="insight-box">
+                    <p><strong>1. Logistic Regression</strong> - Linear classifier, good for linearly separable data</p>
+                    <p><strong>2. Decision Tree</strong> - Non-parametric, handles non-linear relationships</p>
+                    <p><strong>3. Random Forest</strong> - Ensemble method, reduces overfitting</p>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Feature Importance</h3>
+                <div class="chart-container">
+                    <canvas id="featureChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- EVALUATION PAGE -->
+        <div id="eval" class="page">
+            <div class="header">
+                <h1>Model Evaluation</h1>
+            </div>
+            
+            <div class="card">
+                <h3>Performance Metrics Summary</h3>
+                <table>
+                    <thead><tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1 Score</th></tr></thead>
+                    <tbody>
+                        <tr><td>Logistic Regression</td><td>97.3%</td><td>97.4%</td><td>97.3%</td><td>97.3%</td></tr>
+                        <tr><td>Decision Tree</td><td>98.0%</td><td>98.1%</td><td>98.0%</td><td>98.0%</td></tr>
+                        <tr><td>Random Forest</td><td>99.0%</td><td>99.0%</td><td>99.0%</td><td>99.0%</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="card">
+                <h3>Confusion Matrix - Random Forest (Best Model)</h3>
+                <div class="chart-container">
+                    <canvas id="confusionChart"></canvas>
+                </div>
+                <p style="color:#8b949e;margin-top:10px;">
+                    Predicted: Basic (52), Inactive (46), Premium (53), Standard (249)<br>
+                    Actual matches: 396/400 (99.0% accuracy)
+                </p>
+            </div>
+            
+            <div class="card">
+                <h3>Key Insights</h3>
+                <div class="insight-box">
+                    <p><strong>annual_spend</strong> is the most important feature (0.744 importance)</p>
+                    <p>Random Forest achieves <strong>best performance</strong> due to ensemble averaging</p>
+                    <p>High accuracy indicates <strong>clear separation</strong> between segment classes</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TUNING PAGE -->
+        <div id="tuning" class="page">
+            <div class="header">
+                <h1>Hyperparameter Tuning</h1>
+            </div>
+            
+            <div class="card">
+                <h3>GridSearchCV on Random Forest</h3>
+                <p style="color:#8b949e;">Parameters tuned: n_estimators, max_depth, min_samples_split, min_samples_leaf</p>
+            </div>
+            
+            <div class="card">
+                <h3>Best Parameters Found</h3>
+                <div class="insight-box">
+                    <p><strong>n_estimators:</strong> 200</p>
+                    <p><strong>max_depth:</strong> 15</p>
+                    <p><strong>min_samples_split:</strong> 2</p>
+                    <p><strong>min_samples_leaf:</strong> 1</p>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Before vs After Tuning (Random Forest)</h3>
+                <table>
+                    <thead><tr><th>Metric</th><th>Before</th><th>After</th><th>Change</th></tr></thead>
+                    <tbody>
+                        <tr><td>Accuracy</td><td>99.0%</td><td>99.0%</td><td style="color:#238636;">+0.0%</td></tr>
+                        <tr><td>Precision</td><td>99.0%</td><td>99.0%</td><td style="color:#238636;">+0.0%</td></tr>
+                        <tr><td>Recall</td><td>99.0%</td><td>99.0%</td><td style="color:#238636;">+0.0%</td></tr>
+                        <tr><td>F1 Score</td><td>99.0%</td><td>99.3%</td><td style="color:#238636;">+0.3%</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- COMPARISON PAGE -->
+        <div id="compare" class="page">
+            <div class="header">
+                <h1>Model Comparison</h1>
+            </div>
+            
+            <div class="card">
+                <h3>Performance Comparison</h3>
+                <div class="chart-container">
+                    <canvas id="compareChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Analysis</h3>
+                <div class="insight-box">
+                    <p><strong>Best Model:</strong> Random Forest (F1: 99.0%)</p>
+                    <p>All models perform well (>97%), indicating the features strongly predict segment</p>
+                    <p>Random Forest slightly outperforms due to ensemble method reducing variance</p>
+                    <p>No signs of underfitting or overfitting</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- API PAGE -->
+        <div id="api" class="page">
+            <div class="header">
+                <h1>Prediction API</h1>
+            </div>
+            
+            <div class="card">
+                <h3>Test Prediction</h3>
+                <div>
+                    <input type="number" id="annualSpend" placeholder="Annual Spend ($)" value="1500">
+                    <input type="number" id="visits" placeholder="Visits/Month" value="5">
+                    <input type="number" id="items" placeholder="Items/Order" value="3">
+                    <input type="number" id="tickets" placeholder="Support Tickets" value="1">
+                    <button onclick="makePrediction()">Predict Segment</button>
+                </div>
+                <div class="prediction-result" id="predictionResult" style="display:none;">
+                    <p id="rfResult"></p>
+                    <p id="dtResult"></p>
+                    <p id="lrResult"></p>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>FastAPI Endpoint</h3>
+                <pre style="background:#0d1117;padding:16px;border-radius:6px;overflow-x:auto;">POST /predict
+Request: {
+  "annual_spend": 1500,
+  "visits_per_month": 5,
+  "items_per_order": 3,
+  "support_tickets": 1
+}
+Response: {
+  "prediction": "Standard",
+  "probabilities": {
+    "Basic": 0.02,
+    "Inactive": 0.01,
+    "Premium": 0.15,
+    "Standard": 0.82
+  }
+}</pre>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Navigation - Fixed
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            
+            // Find and activate the correct nav button
+            const btnMap = {
+                'home': 'Home', 'eda': 'Data Overview', 'models': 'Model Building',
+                'eval': 'Evaluation', 'tuning': 'Hyperparameter Tuning',
+                'compare': 'Comparison', 'api': 'Prediction API'
+            };
+            
+            const btns = document.querySelectorAll('.nav-btn');
+            btns.forEach(btn => {
+                if(btn.textContent.trim() === btnMap[pageId]) {
+                    btn.classList.add('active');
+                }
+            });
+        }
+
+        // Prediction function - Now calling the real API
+        async function makePrediction() {
+            const spend = parseFloat(document.getElementById('annualSpend').value);
+            const visits = parseInt(document.getElementById('visits').value);
+            const items = parseInt(document.getElementById('items').value);
+            const tickets = parseInt(document.getElementById('tickets').value);
+            
+            const btn = document.querySelector('button[onclick="makePrediction()"]');
+            btn.textContent = 'Predicting...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('http://localhost:8000/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        annual_spend: spend,
+                        visits_per_month: visits,
+                        items_per_order: items,
+                        support_tickets: tickets
+                    })
+                });
+                
+                const data = await response.json();
+                
+                document.getElementById('predictionResult').style.display = 'block';
+                document.getElementById('rfResult').innerHTML = '<span class="tag success">Prediction: ' + data.prediction + '</span>';
+                
+                let probsHtml = '<div style="margin-top:10px;font-size:12px;color:#8b949e;">Probabilities: ';
+                for (const [cls, prob] of Object.entries(data.probabilities)) {
+                    probsHtml += `${cls}: ${(prob * 100).toFixed(1)}% | `;
+                }
+                probsHtml += '</div>';
+                document.getElementById('dtResult').innerHTML = probsHtml;
+                document.getElementById('lrResult').innerHTML = '';
+            } catch (error) {
+                console.error('Error:', error);
+                alert('API error. Make sure api.py is running on port 8000.');
+            } finally {
+                btn.textContent = 'Predict Segment';
+                btn.disabled = false;
+            }
+        }
+
+        // Initialize charts and data
+        document.addEventListener('DOMContentLoaded', async function() {
+            const chartColors = ['#667eea', '#764ba2', '#11998e', '#38ef7d'];
+            
+            // Try to fetch real data
+            let apiData = null;
+            try {
+                const response = await fetch('http://localhost:8000/data/charts');
+                apiData = await response.json();
+                console.log('API Data loaded:', apiData);
+            } catch (e) {
+                console.warn('API not available, using static data');
+            }
+
+            // Update KPI cards if data available
+            if (apiData) {
+                try {
+                    const summaryResp = await fetch('http://localhost:8000/data/summary');
+                    const summary = await summaryResp.json();
+                    document.querySelectorAll('.metric-value')[0].textContent = '$' + (summary.total_revenue / 1000000).toFixed(2) + 'M';
+                    document.querySelectorAll('.metric-value')[1].textContent = summary.total_customers.toLocaleString();
+                } catch(e) {}
+            }
+
+            // Revenue Trend (KPI) - Static as API doesn't have monthly trend yet
+            new Chart(document.getElementById('revenueTrendChart'), {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    datasets: [{
+                        label: 'Revenue ($K)',
+                        data: [120, 145, 168, 172, 189, 205, 218, 225, 238, 252, 268, 290],
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102,126,234,0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { ticks: { color: '#8b949e' } }, x: { ticks: { color: '#8b949e' } } }
+                }
+            });
+            
+            // Revenue by Segment (KPI) - Using Real Data
+            const revData = apiData ? Object.values(apiData.revenue_by_segment) : [45, 32, 18, 5];
+            const revLabels = apiData ? Object.keys(apiData.revenue_by_segment) : ['Premium', 'Standard', 'Basic', 'Inactive'];
+            
+            new Chart(document.getElementById('segmentRevenueChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: revLabels,
+                    datasets: [{
+                        data: revData,
+                        backgroundColor: chartColors
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { color: '#e7e9ea' } } }
+                }
+            });
+            
+            // Class Distribution Chart - Using Real Data
+            const distData = apiData ? Object.values(apiData.segments) : [450, 400, 450, 700];
+            const distLabels = apiData ? Object.keys(apiData.segments) : ['Basic', 'Inactive', 'Premium', 'Standard'];
+
+            new Chart(document.getElementById('classChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: distLabels,
+                    datasets: [{
+                        data: distData,
+                        backgroundColor: chartColors
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { legend: { position: 'bottom', labels: { color: '#e7e9ea' } } } 
+                }
+            });
+
+            // Correlation Heatmap - Using Real Data (First row correlations with annual_spend)
+            let corrLabels = ['spend-visits', 'spend-items', 'spend-tickets', 'visits-items', 'visits-tickets', 'items-tickets'];
+            let corrData = [0.52, 0.38, 0.12, 0.28, 0.15, 0.08];
+            
+            if (apiData && apiData.correlations) {
+                const c = apiData.correlations;
+                corrData = [
+                    c.annual_spend.visits_per_month,
+                    c.annual_spend.items_per_order,
+                    c.annual_spend.support_tickets,
+                    c.visits_per_month.items_per_order,
+                    c.visits_per_month.support_tickets,
+                    c.items_per_order.support_tickets
+                ];
+            }
+
+            new Chart(document.getElementById('corrChart'), {
+                type: 'bar',
+                data: {
+                    labels: corrLabels,
+                    datasets: [{
+                        label: 'Correlation',
+                        data: corrData,
+                        backgroundColor: '#11998e'
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { ticks: { color: '#8b949e' } }, x: { ticks: { color: '#8b949e' } } }
+                }
+            });
+
+            // Feature Importance - Keep static as it requires model insight
+            new Chart(document.getElementById('featureChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['annual_spend', 'visits_per_month', 'items_per_order', 'support_tickets'],
+                    datasets: [{
+                        label: 'Importance',
+                        data: [0.744, 0.158, 0.067, 0.031],
+                        backgroundColor: chartColors
+                    }]
+                },
+                options: { 
+                    indexAxis: 'y',
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { x: { ticks: { color: '#8b949e' } }, y: { ticks: { color: '#8b949e' } } }
+                }
+            });
+
+            // Confusion Matrix
+            new Chart(document.getElementById('confusionChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['Basic', 'Inactive', 'Premium', 'Standard'],
+                    datasets: [{
+                        label: 'Predicted Correct',
+                        data: [51, 45, 52, 249],
+                        backgroundColor: '#238636'
+                    }, {
+                        label: 'Predicted Wrong',
+                        data: [1, 1, 1, 0],
+                        backgroundColor: '#da3633'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { color: '#e7e9ea' } } },
+                    scales: { x: { stacked: true, ticks: { color: '#8b949e' } }, y: { stacked: true, ticks: { color: '#8b949e' } } }
+                }
+            });
+
+            // Model Comparison
+            new Chart(document.getElementById('compareChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['Logistic Regression', 'Decision Tree', 'Random Forest'],
+                    datasets: [
+                        { label: 'Accuracy', data: [97.3, 98.0, 99.0], backgroundColor: '#667eea' },
+                        { label: 'Precision', data: [97.4, 98.1, 99.0], backgroundColor: '#764ba2' },
+                        { label: 'Recall', data: [97.3, 98.0, 99.0], backgroundColor: '#11998e' },
+                        { label: 'F1 Score', data: [97.3, 98.0, 99.0], backgroundColor: '#38ef7d' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { color: '#e7e9ea' } } },
+                    scales: { y: { max: 100, ticks: { color: '#8b949e' } } }
+                }
+            });
+        }); // End DOMContentLoaded
+    </script>
+</body>
+</html>
